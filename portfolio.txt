@@ -1,0 +1,2 @@
+TCS.NS
+INFY.NS
