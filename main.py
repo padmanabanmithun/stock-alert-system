@@ -66,7 +66,5 @@ def check_stocks():
 
 
 if __name__ == "__main__":
-    send_email(
-        subject="Test Email from GitHub Actions",
-        body="If you received this, email system works."
-    )
+    if is_market_open():
+        check_stocks()
