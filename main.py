@@ -52,8 +52,8 @@ def check_stocks():
 
         drop_percent = ((previous_close - current_price) / previous_close) * 100
 
-        if drop_percent >= 5 and stock not in alerted_today:
-            subject = f"🚨 5% Crash Alert: {stock}"
+        if drop_percent >= 1 and stock not in alerted_today:
+            subject = f"🚨 1% Crash Alert: {stock}"
             body = f"{stock} dropped {drop_percent:.2f}%.\nCurrent: {current_price}"
             send_email(subject, body)
             alerted_today.add(stock)
