@@ -3,6 +3,7 @@ import pytz
 import datetime
 import json
 import os
+import pandas as pd
 from email_service import send_email
 
 IST = pytz.timezone("Asia/Kolkata")
@@ -73,10 +74,9 @@ def check_stocks():
 
     alerts = load_alerts()
 
-    # ONE API CALL
     data = yf.download(
         all_stocks,
-        period="2d",
+        period="5d",
         interval="1d",
         group_by="ticker",
         progress=False
@@ -89,11 +89,18 @@ def check_stocks():
 
         try:
             stock_data = data[stock]
-
-            previous_close = stock_data["Close"].iloc[-2]
-            current_price = stock_data["Close"].iloc[-1]
-
         except Exception:
+            continue
+
+        closes = stock_data["Close"].dropna()
+
+        if len(closes) < 2:
+            continue
+
+        previous_close = closes.iloc[-2]
+        current_price = closes.iloc[-1]
+
+        if pd.isna(previous_close) or pd.isna(current_price):
             continue
 
         drop_percent = ((previous_close - current_price) / previous_close) * 100
@@ -102,9 +109,9 @@ def check_stocks():
             continue
 
         if stock in portfolio:
-            subject = f"HOLDING : {stock} crash {drop_percent:.2f}%"
+            subject = f"🚨 HOLDING : {stock} crash {drop_percent:.2f}%"
         else:
-            subject = f"WISHLIST : {stock} crash {drop_percent:.2f}%"
+            subject = f"🚨 WISHLIST : {stock} crash {drop_percent:.2f}%"
 
         body = f"""
 Stock: {stock}
