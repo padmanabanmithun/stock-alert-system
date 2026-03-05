@@ -2,12 +2,15 @@ import yfinance as yf
 import pytz
 import datetime
 import json
+import os
 from email_service import send_email
 
 IST = pytz.timezone("Asia/Kolkata")
 
+
 def is_market_open():
     now = datetime.datetime.now(IST)
+
     if now.weekday() >= 5:
         return False
 
@@ -15,6 +18,7 @@ def is_market_open():
         holidays = json.load(f)
 
     today_str = now.strftime("%Y-%m-%d")
+
     if today_str in holidays:
         return False
 
@@ -31,38 +35,89 @@ def load_stocks():
     with open("wishlist.txt") as f:
         wishlist = [line.strip() for line in f.readlines()]
 
-    return portfolio + wishlist
+    return portfolio, wishlist
+
+
+def load_alerts():
+    if os.path.exists("alerts_sent.json"):
+        with open("alerts_sent.json", "r") as f:
+            return json.load(f)
+    return {}
+
+
+def save_alerts(data):
+    with open("alerts_sent.json", "w") as f:
+        json.dump(data, f)
+
+
+def already_alerted(stock, alerts):
+    today = datetime.datetime.now(IST).strftime("%Y-%m-%d")
+
+    if today not in alerts:
+        alerts[today] = []
+
+    return stock in alerts[today]
+
+
+def mark_alert(stock, alerts):
+    today = datetime.datetime.now(IST).strftime("%Y-%m-%d")
+
+    alerts[today].append(stock)
+    save_alerts(alerts)
 
 
 def check_stocks():
-    stocks = load_stocks()
-    alerted_today = set()
 
-    for stock in stocks:
-        ticker = yf.Ticker(stock)
-        data = ticker.history(period="2d")
-        info = ticker.info
+    portfolio, wishlist = load_stocks()
+    all_stocks = portfolio + wishlist
 
-        if len(data) < 2:
+    alerts = load_alerts()
+
+    # ONE API CALL
+    data = yf.download(
+        all_stocks,
+        period="2d",
+        interval="1d",
+        group_by="ticker",
+        progress=False
+    )
+
+    for stock in all_stocks:
+
+        if already_alerted(stock, alerts):
             continue
 
-        previous_close = data["Close"].iloc[-2]
-        current_price = data["Close"].iloc[-1]
-        fifty_two_low = info.get("fiftyTwoWeekLow")
+        try:
+            stock_data = data[stock]
+
+            previous_close = stock_data["Close"].iloc[-2]
+            current_price = stock_data["Close"].iloc[-1]
+
+        except Exception:
+            continue
 
         drop_percent = ((previous_close - current_price) / previous_close) * 100
 
-        if drop_percent >= 1 and stock not in alerted_today:
-            subject = f"🚨 1% Crash Alert: {stock}"
-            body = f"{stock} dropped {drop_percent:.2f}%.\nCurrent: {current_price}"
-            send_email(subject, body)
-            alerted_today.add(stock)
+        if drop_percent < 5:
+            continue
 
-        if fifty_two_low and current_price <= fifty_two_low and stock not in alerted_today:
-            subject = f"📉 52W Low Alert: {stock}"
-            body = f"{stock} hit 52-week low.\nCurrent: {current_price}"
-            send_email(subject, body)
-            alerted_today.add(stock)
+        if stock in portfolio:
+            subject = f"HOLDING : {stock} crash {drop_percent:.2f}%"
+        else:
+            subject = f"WISHLIST : {stock} crash {drop_percent:.2f}%"
+
+        body = f"""
+Stock: {stock}
+
+Current Price: {current_price:.2f}
+Previous Close: {previous_close:.2f}
+
+Crash: {drop_percent:.2f}%
+"""
+
+        send_email(subject, body)
+
+        mark_alert(stock, alerts)
 
 
 if __name__ == "__main__":
