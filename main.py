@@ -98,7 +98,7 @@ def check_stocks():
 
         drop_percent = ((previous_close - current_price) / previous_close) * 100
 
-        if drop_percent < 5:
+        if drop_percent < 3:
             continue
 
         if stock in portfolio:
