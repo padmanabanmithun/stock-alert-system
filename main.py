@@ -62,9 +62,52 @@ def already_alerted(stock, alerts):
 
 def mark_alert(stock, alerts):
     today = datetime.datetime.now(IST).strftime("%Y-%m-%d")
-
     alerts[today].append(stock)
     save_alerts(alerts)
+
+
+def get_ratio_info(stock):
+
+    ticker = yf.Ticker(stock)
+    info = ticker.info
+
+    industry = str(info.get("industry", ""))
+    industry_main = industry.split("-")[0].strip().lower()
+
+    emoji = "❌"
+    ratio_text = ""
+
+    # BANK LOGIC
+    if industry_main == "banks":
+
+        ratio = info.get("priceToBook")
+
+        if ratio is not None and ratio < 1:
+            emoji = "✅"
+
+        ratio_display = "N/A" if ratio is None else f"{ratio:.2f}"
+
+        ratio_text = f"""
+Price to Book: {emoji}
+Actual Ratio: {ratio_display}
+"""
+
+    # OTHER STOCKS
+    else:
+
+        ratio = info.get("trailingPE")
+
+        if ratio is not None and ratio < 20:
+            emoji = "✅"
+
+        ratio_display = "N/A" if ratio is None else f"{ratio:.2f}"
+
+        ratio_text = f"""
+P/E Ratio: {emoji}
+Actual Ratio: {ratio_display}
+"""
+
+    return emoji, ratio_text
 
 
 def check_stocks():
@@ -79,7 +122,8 @@ def check_stocks():
         period="5d",
         interval="1d",
         group_by="ticker",
-        progress=False
+        progress=False,
+        threads=False
     )
 
     for stock in all_stocks:
@@ -108,18 +152,38 @@ def check_stocks():
         if drop_percent < 3:
             continue
 
-        if stock in portfolio:
-            subject = f"🚨 HOLDING : {stock} crash {drop_percent:.2f}%"
-        else:
-            subject = f"🚨 WISHLIST : {stock} crash {drop_percent:.2f}%"
+        # GOLD LOGIC
+        if stock == "GOLD1.NS":
 
-        body = f"""
+            subject = f"🟡 Gold Crashed {drop_percent:.2f}%"
+
+            body = f"""
+Asset: Gold ETF ({stock})
+
+Current Price: {current_price:.2f}
+Previous Close: {previous_close:.2f}
+
+Gold Crash: {drop_percent:.2f}%
+"""
+
+        else:
+
+            emoji, ratio_text = get_ratio_info(stock)
+
+            if stock in portfolio:
+                subject = f"{emoji} HOLDING : {stock} crash {drop_percent:.2f}% 🚨"
+            else:
+                subject = f"{emoji} WISHLIST : {stock} crash {drop_percent:.2f}% 🚨"
+
+            body = f"""
 Stock: {stock}
 
 Current Price: {current_price:.2f}
 Previous Close: {previous_close:.2f}
 
 Crash: {drop_percent:.2f}%
+
+{ratio_text}
 """
 
         send_email(subject, body)
